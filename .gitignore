@@ -1,0 +1,8 @@
+# Generated offline repository content
+snap-offline/
+
+# Local noise
+.codex
+.DS_Store
+*.log
+*.swp
