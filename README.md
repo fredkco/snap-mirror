@@ -21,6 +21,8 @@ Tested on Ubuntu 22.04, 24.04, and 26.04 (beta).
 ## Quick Start
 
 ```bash
+git clone https://github.com/fredkco/snap-mirror.git
+cd snap-mirror
 chmod +x snap-fetch.sh
 ./snap-fetch.sh snap.list ./snap-offline
 ```
