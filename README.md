@@ -6,6 +6,10 @@ Build an HTTP-served offline mirror for Snap packages.
 
 Search keywords: `snap-offline`, `snap offline`, `offline snap repository`.
 
+## Compatibility
+
+Tested on Ubuntu 22.04, 24.04, and 26.04 (beta).
+
 ## Requirements
 
 - Linux with Bash and `snapd`
