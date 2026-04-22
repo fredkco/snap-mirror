@@ -54,6 +54,7 @@ By default, output is written to `./snap-offline`:
 - `snap-offline.sh`
 
 The fetch process is incremental and keeps state in `snap-offline/.state/`.
+On repeated runs, unpinned entries (`name` or `name=<channel>`) are checked for newer revisions and downloaded when updates are available.
 
 ## Host The Repository
 
