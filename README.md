@@ -76,10 +76,10 @@ On the target machine:
 wget http://<server>:8080/snap-offline/snap-offline.sh
 chmod +x snap-offline.sh
 export SNAP_REPO_URL="http://<server>:8080/snap-offline"
-./snap-offline.sh list
-./snap-offline.sh install firefox
-./snap-offline.sh update
-./snap-offline.sh --force-stop-running update
+./snap-offline.sh --list
+./snap-offline.sh --install firefox
+./snap-offline.sh --update
+./snap-offline.sh --force-stop-running --update
 ```
 
 ## Useful Environment Variables

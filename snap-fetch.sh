@@ -677,6 +677,7 @@ set -euo pipefail
 
 SNAP_REPO_URL="${SNAP_REPO_URL:-http://your-server/snaps}"
 SNAP_CACHE_DIR="${SNAP_CACHE_DIR:-/var/tmp/snap-offline}"
+SNAP_WGET_NO_CHECK_CERTIFICATE="${SNAP_WGET_NO_CHECK_CERTIFICATE:-1}"
 MANIFEST_URL="${SNAP_REPO_URL%/}/manifest.tsv"
 MANIFEST_FILE="$SNAP_CACHE_DIR/manifest.tsv"
 FORCE_STOP_RUNNING=0
@@ -699,10 +700,15 @@ download_url() {
   local url="$1"
   local out="$2"
   local tmp_out
+  local wget_args=()
   log "Downloading $url"
   tmp_out="${out}.tmp.$$"
 
-  if ! wget -q -O "$tmp_out" "$url"; then
+  if [[ "$SNAP_WGET_NO_CHECK_CERTIFICATE" == "1" ]]; then
+    wget_args+=(--no-check-certificate)
+  fi
+
+  if ! wget -q "${wget_args[@]}" -O "$tmp_out" "$url"; then
     rm -f "$tmp_out"
     echo "ERROR: download failed: $url"
     return 1
@@ -775,14 +781,15 @@ validate_manifest() {
         fail("manifest row " NR " has empty snap_name")
       }
 
-      if (name in seen) {
-        fail("duplicate snap_name \"" name "\" in rows " seen[name] " and " NR)
-      } else {
-        seen[name] = NR
-      }
-
       if (revision !~ /^[0-9]+$/) {
         fail("invalid revision for " name " in row " NR ": " revision)
+      }
+
+      key = name SUBSEP revision
+      if (key in seen_revision) {
+        fail("duplicate snap_name/revision \"" name "\" revision " revision " in rows " seen_revision[key] " and " NR)
+      } else {
+        seen_revision[key] = NR
       }
 
       if (requested != "yes" && requested != "no") {
@@ -833,7 +840,21 @@ validate_manifest() {
 get_field() {
   local name="$1"
   local idx="$2"
-  awk -F'\t' -v n="$name" -v i="$idx" 'NR>1 && $1==n {print $i; exit}' "$MANIFEST_FILE"
+  awk -F'\t' -v n="$name" -v i="$idx" '
+    NR > 1 && $1 == n {
+      rev = $3 + 0
+      if (!found || rev > best_rev) {
+        found = 1
+        best_rev = rev
+        value = $i
+      }
+    }
+    END {
+      if (found) {
+        print value
+      }
+    }
+  ' "$MANIFEST_FILE"
 }
 
 download_file() {
@@ -1112,15 +1133,25 @@ while [[ $# -gt 0 ]]; do
         COMMAND_ARGS+=("$1")
       fi
       ;;
+    --install|--update|--list)
+      if [[ "$COMMAND_SET" -eq 0 ]]; then
+        COMMAND="${1#--}"
+        COMMAND_SET=1
+      else
+        echo "ERROR: command already specified: $1"
+        echo "Usage: $0 [--force-stop-running] install|--install <snap...> | update|--update | list|--list"
+        exit 1
+      fi
+      ;;
     -*)
       echo "ERROR: unknown option: $1"
-      echo "Usage: $0 [--force-stop-running] install <snap...> | update | list"
+      echo "Usage: $0 [--force-stop-running] install|--install <snap...> | update|--update | list|--list"
       exit 1
       ;;
     *)
       if [[ "$COMMAND_SET" -eq 0 ]]; then
         echo "ERROR: missing command before argument: $1"
-        echo "Usage: $0 [--force-stop-running] install <snap...> | update | list"
+        echo "Usage: $0 [--force-stop-running] install|--install <snap...> | update|--update | list|--list"
         exit 1
       fi
       COMMAND_ARGS+=("$1")
@@ -1136,7 +1167,7 @@ fi
 case "$COMMAND" in
   install)
     if [[ "${#COMMAND_ARGS[@]}" -lt 1 ]]; then
-      echo "Usage: $0 [--force-stop-running] install <snap...>"
+      echo "Usage: $0 [--force-stop-running] install|--install <snap...>"
       exit 1
     fi
     download_manifest
@@ -1146,7 +1177,7 @@ case "$COMMAND" in
     ;;
   update)
     if [[ "${#COMMAND_ARGS[@]}" -gt 0 ]]; then
-      echo "Usage: $0 [--force-stop-running] update"
+      echo "Usage: $0 [--force-stop-running] update|--update"
       exit 1
     fi
     download_manifest
@@ -1157,14 +1188,14 @@ case "$COMMAND" in
     ;;
   list)
     if [[ "${#COMMAND_ARGS[@]}" -gt 0 ]]; then
-      echo "Usage: $0 list"
+      echo "Usage: $0 list|--list"
       exit 1
     fi
     download_manifest
     list_available
     ;;
   *)
-    echo "Usage: $0 [--force-stop-running] install <snap...> | update | list"
+    echo "Usage: $0 [--force-stop-running] install|--install <snap...> | update|--update | list|--list"
     exit 1
     ;;
 esac
@@ -1259,11 +1290,11 @@ echo '  </pre>'
 	echo 'wget http://your-server/snaps/snap-offline.sh'
 	echo 'chmod +x snap-offline.sh'
 	echo 'export SNAP_REPO_URL=http://your-server/snaps'
-	echo './snap-offline.sh install firefox'
-	echo './snap-offline.sh update'
-	echo './snap-offline.sh list'
-	echo './snap-offline.sh --force-stop-running update'
-	echo './snap-offline.sh --force-stop-running install firefox'
+	echo './snap-offline.sh --install firefox'
+	echo './snap-offline.sh --update'
+	echo './snap-offline.sh --list'
+	echo './snap-offline.sh --force-stop-running --update'
+	echo './snap-offline.sh --force-stop-running --install firefox'
 	echo '  </pre>'
 	echo '  <p>Download <code>snap-offline.sh</code> from the link at the top of this page.'
 	echo '  The browser download is preconfigured for this repository URL.</p>'
