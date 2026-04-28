@@ -178,6 +178,30 @@ is_requested() {
   db_has_line "$snap_name" "$REQUESTED_DB"
 }
 
+is_pinned_revision_requested() {
+  local snap_name="$1"
+  local revision="$2"
+  local raw_line
+  local line
+  local requested_name
+  local selector_value
+
+  while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
+    line="$(normalize_line "$raw_line")"
+    [[ -z "$line" ]] && continue
+
+    requested_name="$(parse_name "$line")"
+    [[ "$requested_name" == "$snap_name" ]] || continue
+
+    selector_value="$(parse_selector_value "$line")"
+    if [[ "$(selector_kind_for_value "$selector_value")" == "revision" && "$selector_value" == "$revision" ]]; then
+      return 0
+    fi
+  done < "$LIST_FILE"
+
+  return 1
+}
+
 is_downloaded() {
   local snap_name="$1"
   db_has_line "$snap_name" "$DOWNLOADED_DB"
@@ -1339,10 +1363,11 @@ cleanup_old_revisions() {
   local keep_count=3
   local snap_name
   local revision_list
+  local unpinned_revisions
   local old_revisions
   local rev
 
-  log "Cleaning old revisions: keep latest $keep_count per snap"
+  log "Cleaning old revisions: keep latest $keep_count unpinned revisions per snap plus pinned revisions"
 
   find "$OUT_DIR" -maxdepth 1 -type f -name '*.snap' | while read -r snap_file; do
     snap_name="$(basename "$snap_file" .snap)"
@@ -1360,13 +1385,27 @@ cleanup_old_revisions() {
         | awk '{print $1}'
     )"
 
+    unpinned_revisions="$(
+      while IFS= read -r rev; do
+        [[ -z "$rev" ]] && continue
+        if ! is_pinned_revision_requested "$snap_name" "$rev"; then
+          printf '%s\n' "$rev"
+        fi
+      done <<< "$revision_list"
+    )"
+
     old_revisions="$(
-      printf '%s\n' "$revision_list" | head -n -"$keep_count" 2>/dev/null || true
+      printf '%s\n' "$unpinned_revisions" | head -n -"$keep_count" 2>/dev/null || true
     )"
 
     if [[ -n "$old_revisions" ]]; then
       while IFS= read -r rev; do
         [[ -z "$rev" ]] && continue
+
+        if is_pinned_revision_requested "$snap_name" "$rev"; then
+          log "Keeping pinned revision: ${snap_name}_${rev}"
+          continue
+        fi
 
         find "$OUT_DIR" -maxdepth 1 -type f \
           \( -name "${snap_name}_${rev}.snap" -o -name "${snap_name}_${rev}.assert" \) \
